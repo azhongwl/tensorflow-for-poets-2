@@ -120,7 +120,8 @@ FLAGS = None
 # sizes. If you want to adapt this script to work with another model, you will
 # need to update these to reflect the values in the network you're using.
 MAX_NUM_IMAGES_PER_CLASS = 2 ** 27 - 1  # ~134M
-
+# Contains cached ground_truth vectors to prevent calculating them again and again
+CACHED_GROUND_TRUTH_VECTORS = {}
 
 def create_image_lists(image_dir, testing_percentage, validation_percentage):
   """Builds a list of training images from the file system.
@@ -173,6 +174,8 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
     validation_images = []
     for file_name in file_list:
       base_name = os.path.basename(file_name)
+      if base_name.split('.jpg')[0] not in CACHED_GROUND_TRUTH_VECTORS.keys():
+        continue
       # We want to ignore anything after '_nohash_' in the file name when
       # deciding which set to put an image in, the data set creator has a way of
       # grouping photos that are close variations of each other. For example
@@ -351,8 +354,6 @@ def ensure_dir_exists(dir_name):
 
 
 bottleneck_path_2_bottleneck_values = {}
-
-
 def create_bottleneck_file(bottleneck_path, image_lists, label_name, index,
                            image_dir, category, sess, jpeg_data_tensor,
                            decoded_image_tensor, resized_input_tensor,
@@ -484,7 +485,7 @@ def cache_bottlenecks(sess, image_lists, image_dir, bottleneck_dir,
 def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
                                   bottleneck_dir, image_dir, jpeg_data_tensor,
                                   decoded_image_tensor, resized_input_tensor,
-                                  bottleneck_tensor, architecture):
+                                  bottleneck_tensor, architecture, labels):
   """Retrieves bottleneck values for cached images.
 
   If no distortions are being applied, this function can retrieve the cached
@@ -511,14 +512,16 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
     List of bottleneck arrays, their corresponding ground truths, and the
     relevant filenames.
   """
-  class_count = len(image_lists.keys())
+  # class_count = len(image_lists.keys())
+  class_count = len(labels)
   bottlenecks = []
   ground_truths = []
   filenames = []
   if how_many >= 0:
     # Retrieve a random sample of bottlenecks.
     for unused_i in range(how_many):
-      label_index = random.randrange(class_count)
+      # label_index = random.randrange(class_count)
+      label_index = 0 # there is only one folder with images
       label_name = list(image_lists.keys())[label_index]
       image_index = random.randrange(MAX_NUM_IMAGES_PER_CLASS + 1)
       image_name = get_image_path(image_lists, label_name, image_index,
@@ -527,8 +530,8 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
           sess, image_lists, label_name, image_index, image_dir, category,
           bottleneck_dir, jpeg_data_tensor, decoded_image_tensor,
           resized_input_tensor, bottleneck_tensor, architecture)
-      ground_truth = np.zeros(class_count, dtype=np.float32)
-      ground_truth[label_index] = 1.0
+      basename = os.path.basename(image_name).split('.jpg')[0]
+      ground_truth = CACHED_GROUND_TRUTH_VECTORS[basename]
       bottlenecks.append(bottleneck)
       ground_truths.append(ground_truth)
       filenames.append(image_name)
@@ -543,8 +546,8 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
             sess, image_lists, label_name, image_index, image_dir, category,
             bottleneck_dir, jpeg_data_tensor, decoded_image_tensor,
             resized_input_tensor, bottleneck_tensor, architecture)
-        ground_truth = np.zeros(class_count, dtype=np.float32)
-        ground_truth[label_index] = 1.0
+        basename = os.path.basename(image_name).split('.jpg')[0]
+        ground_truth = CACHED_GROUND_TRUTH_VECTORS[basename]
         bottlenecks.append(bottleneck)
         ground_truths.append(ground_truth)
         filenames.append(image_name)
@@ -553,7 +556,7 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
 
 def get_random_distorted_bottlenecks(
     sess, image_lists, how_many, category, image_dir, input_jpeg_tensor,
-    distorted_image, resized_input_tensor, bottleneck_tensor):
+    distorted_image, resized_input_tensor, bottleneck_tensor, labels):
   """Retrieves bottleneck values for training images, after distortions.
 
   If we're training with distortions like crops, scales, or flips, we have to
@@ -578,11 +581,13 @@ def get_random_distorted_bottlenecks(
   Returns:
     List of bottleneck arrays and their corresponding ground truths.
   """
-  class_count = len(image_lists.keys())
+  # class_count = len(image_lists.keys())
+  class_count = len(labels)
   bottlenecks = []
   ground_truths = []
   for unused_i in range(how_many):
-    label_index = random.randrange(class_count)
+    # label_index = random.randrange(class_count)
+    label_index = 0 # there is only one folder with images
     label_name = list(image_lists.keys())[label_index]
     image_index = random.randrange(MAX_NUM_IMAGES_PER_CLASS + 1)
     image_path = get_image_path(image_lists, label_name, image_index, image_dir,
@@ -598,8 +603,8 @@ def get_random_distorted_bottlenecks(
     bottleneck_values = sess.run(bottleneck_tensor,
                                  {resized_input_tensor: distorted_image_data})
     bottleneck_values = np.squeeze(bottleneck_values)
-    ground_truth = np.zeros(class_count, dtype=np.float32)
-    ground_truth[label_index] = 1.0
+    basename = os.path.basename(image_path).split('.jpg')[0]
+    ground_truth = CACHED_GROUND_TRUTH_VECTORS[basename]
     bottlenecks.append(bottleneck_values)
     ground_truths.append(ground_truth)
   return bottlenecks, ground_truths
@@ -782,11 +787,12 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor,
       logits = tf.matmul(bottleneck_input, layer_weights) + layer_biases
       tf.summary.histogram('pre_activations', logits)
 
-  final_tensor = tf.nn.softmax(logits, name=final_tensor_name)
+  # final_tensor = tf.nn.softmax(logits, name=final_tensor_name)
+  final_tensor = tf.nn.sigmoid(logits, name=final_tensor_name)
   tf.summary.histogram('activations', final_tensor)
 
   with tf.name_scope('cross_entropy'):
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+    cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
         labels=ground_truth_input, logits=logits)
     with tf.name_scope('total'):
       cross_entropy_mean = tf.reduce_mean(cross_entropy)
@@ -813,9 +819,11 @@ def add_evaluation_step(result_tensor, ground_truth_tensor):
   """
   with tf.name_scope('accuracy'):
     with tf.name_scope('correct_prediction'):
-      prediction = tf.argmax(result_tensor, 1)
-      correct_prediction = tf.equal(
-          prediction, tf.argmax(ground_truth_tensor, 1))
+      # prediction = tf.argmax(result_tensor, 1)
+      # correct_prediction = tf.equal(
+      #     prediction, tf.argmax(ground_truth_tensor, 1))
+      prediction = tf.round(result_tensor)
+      correct_prediction = tf.equal(tf.round(result_tensor), ground_truth_tensor)
     with tf.name_scope('accuracy'):
       evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
   tf.summary.scalar('accuracy', evaluation_step)
@@ -963,6 +971,35 @@ def add_jpeg_decoding(input_width, input_height, input_depth, input_mean,
   mul_image = tf.multiply(offset_image, 1.0 / input_std)
   return jpeg_data, mul_image
 
+def read_annotation(annotation):
+  if not gfile.Exists(annotation):
+    tf.logging.error("Annotation csv '" + annotation + "' not found.")
+    return None
+  keys = []
+  header = False
+  lines = []
+  with open(annotation) as fi:
+    for line in fi:
+      if not header:
+        header = True
+        continue
+      if not keys:
+        keys = line.rstrip().split('\t')
+        continue
+      lines.append(line.rstrip().split('\t'))
+  return keys, lines
+
+def load_ground_truth_cache(keys, lines):
+  class_count = len(keys) - 3
+  for line in lines:
+    ground_truth = np.zeros(class_count, dtype=np.float32)
+    name = line[0]
+    index = int(line[1])
+    filename = '_'.join(name.split()) + '_{:04}'.format(index)
+    for i in range(class_count):
+      if float(line[i+2]) > 0:
+        ground_truth[i] = 1.0
+    CACHED_GROUND_TRUTH_VECTORS[filename] = ground_truth
 
 def main(_):
   # Needed to make sure the logging output is visible.
@@ -983,18 +1020,14 @@ def main(_):
   graph, bottleneck_tensor, resized_image_tensor = (
       create_model_graph(model_info))
 
+  keys, lines = read_annotation(FLAGS.annotation)
+  load_ground_truth_cache(keys, lines)
+
   # Look at the folder structure, and create lists of all the images.
   image_lists = create_image_lists(FLAGS.image_dir, FLAGS.testing_percentage,
                                    FLAGS.validation_percentage)
-  class_count = len(image_lists.keys())
-  if class_count == 0:
-    tf.logging.error('No valid folders of images found at ' + FLAGS.image_dir)
-    return -1
-  if class_count == 1:
-    tf.logging.error('Only one valid folder of images found at ' +
-                     FLAGS.image_dir +
-                     ' - multiple classes are needed for classification.')
-    return -1
+  labels = keys[3:]
+  class_count = len(labels)
 
   # See if the command-line flags mean we're applying any distortions.
   do_distort_images = should_distort_images(
@@ -1027,7 +1060,7 @@ def main(_):
     # Add the new layer that we'll be training.
     (train_step, cross_entropy, bottleneck_input, ground_truth_input,
      final_tensor) = add_final_training_ops(
-         len(image_lists.keys()), FLAGS.final_tensor_name, bottleneck_tensor,
+         class_count, FLAGS.final_tensor_name, bottleneck_tensor,
          model_info['bottleneck_tensor_size'])
 
     # Create the operations we need to evaluate the accuracy of our new layer.
@@ -1055,14 +1088,14 @@ def main(_):
          train_ground_truth) = get_random_distorted_bottlenecks(
              sess, image_lists, FLAGS.train_batch_size, 'training',
              FLAGS.image_dir, distorted_jpeg_data_tensor,
-             distorted_image_tensor, resized_image_tensor, bottleneck_tensor)
+             distorted_image_tensor, resized_image_tensor, bottleneck_tensor, labels)
       else:
         (train_bottlenecks,
          train_ground_truth, _) = get_random_cached_bottlenecks(
              sess, image_lists, FLAGS.train_batch_size, 'training',
              FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
              decoded_image_tensor, resized_image_tensor, bottleneck_tensor,
-             FLAGS.architecture)
+             FLAGS.architecture, labels)
       # Feed the bottlenecks and ground truth into the graph, and run a training
       # step. Capture training summaries for TensorBoard with the `merged` op.
       train_summary, _ = sess.run(
@@ -1087,7 +1120,7 @@ def main(_):
                 sess, image_lists, FLAGS.validation_batch_size, 'validation',
                 FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
                 decoded_image_tensor, resized_image_tensor, bottleneck_tensor,
-                FLAGS.architecture))
+                FLAGS.architecture, labels))
         # Run a validation step and capture training summaries for TensorBoard
         # with the `merged` op.
         validation_summary, validation_accuracy = sess.run(
@@ -1117,7 +1150,7 @@ def main(_):
             sess, image_lists, FLAGS.test_batch_size, 'testing',
             FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
             decoded_image_tensor, resized_image_tensor, bottleneck_tensor,
-            FLAGS.architecture))
+            FLAGS.architecture, labels))
     test_accuracy, predictions = sess.run(
         [evaluation_step, prediction],
         feed_dict={bottleneck_input: test_bottlenecks,
@@ -1131,13 +1164,13 @@ def main(_):
         if predictions[i] != test_ground_truth[i].argmax():
           tf.logging.info('%70s  %s' %
                           (test_filename,
-                           list(image_lists.keys())[predictions[i]]))
+                           labels[predictions[i]]))
 
     # Write out the trained graph and labels with the weights stored as
     # constants.
     save_graph_to_file(sess, graph, FLAGS.output_graph)
     with gfile.FastGFile(FLAGS.output_labels, 'w') as f:
-      f.write('\n'.join(image_lists.keys()) + '\n')
+      f.write('\n'.join(labels) + '\n')
 
 
 if __name__ == '__main__':
@@ -1147,6 +1180,12 @@ if __name__ == '__main__':
       type=str,
       default='',
       help='Path to folders of labeled images.'
+  )
+  parser.add_argument(
+      '--annotation',
+      type=str,
+      default='',
+      help='Path of annotation file'
   )
   parser.add_argument(
       '--output_graph',

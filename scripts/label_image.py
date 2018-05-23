@@ -68,9 +68,13 @@ def load_labels(label_file):
   return label
 
 if __name__ == "__main__":
-  file_name = "tf_files/flower_photos/daisy/3475870145_685a19116d.jpg"
-  model_file = "tf_files/retrained_graph.pb"
-  label_file = "tf_files/retrained_labels.txt"
+  file_name = "/Users/azhong/face/data/lfpw_pruned/images/19190173.jpg"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/beyonce-knowles-2486522_1350.jpg"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/hounsou%252Bdjimon.jpg"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/main-171.jpg"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/DianeKeatonWhite_newsphoto.jpg"
+  model_file = "tf_files/mobilenet/retrained_graph.pb"
+  label_file = "tf_files/mobilenet/retrained_labels.txt"
   input_height = 224
   input_width = 224
   input_mean = 128
@@ -128,7 +132,7 @@ if __name__ == "__main__":
     end=time.time()
   results = np.squeeze(results)
 
-  top_k = results.argsort()[-5:][::-1]
+  top_k = results.argsort()[:][::-1]
   labels = load_labels(label_file)
 
   print('\nEvaluation time (1-image): {:.3f}s\n'.format(end-start))
