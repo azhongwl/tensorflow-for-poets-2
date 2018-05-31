@@ -103,6 +103,7 @@ import random
 import re
 import sys
 import tarfile
+import math
 
 import numpy as np
 from six.moves import urllib
@@ -168,7 +169,7 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
       tf.logging.warning(
           'WARNING: Folder {} has more than {} images. Some images will '
           'never be selected.'.format(dir_name, MAX_NUM_IMAGES_PER_CLASS))
-    label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
+    label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name)
     training_images = []
     testing_images = []
     validation_images = []
@@ -186,7 +187,7 @@ def create_image_lists(image_dir, testing_percentage, validation_percentage):
       # go into the training, testing, or validation sets, and we want to keep
       # existing files in the same set even if more files are subsequently
       # added.
-      # To do that, we need a stable way of deciding based on just the file name
+                          # To do that, we need a stable way of deciding based on just the file name
       # itself, so we do a hash of that and then use that to generate a
       # probability value that we use to assign it.
       hash_name_hashed = hashlib.sha1(compat.as_bytes(hash_name)).hexdigest()
@@ -793,7 +794,7 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor,
 
   with tf.name_scope('cross_entropy'):
     cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
-        labels=ground_truth_input, logits=logits)
+        logits=logits, labels=ground_truth_input)
     with tf.name_scope('total'):
       cross_entropy_mean = tf.reduce_mean(cross_entropy)
   tf.summary.scalar('cross_entropy', cross_entropy_mean)
@@ -804,6 +805,18 @@ def add_final_training_ops(class_count, final_tensor_name, bottleneck_tensor,
 
   return (train_step, cross_entropy_mean, bottleneck_input, ground_truth_input,
           final_tensor)
+
+
+def add_evaluation_step_per_class(result_tensor, ground_truth_tensor, i, labels):
+  label_legal = '_'.join(labels[i].replace("'", '').split())
+  with tf.name_scope('accuracy_{}'.format(label_legal)):
+    with tf.name_scope('correct_prediction'):
+      prediction = tf.round(result_tensor)
+      correct_prediction = tf.equal(tf.round(result_tensor), ground_truth_tensor)
+    with tf.name_scope('accuracy_{}'.format(label_legal)):
+      evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), 0)[i]
+  tf.summary.scalar('accuracy_{}'.format(label_legal), evaluation_step)
+  return evaluation_step, prediction
 
 
 def add_evaluation_step(result_tensor, ground_truth_tensor):
@@ -819,9 +832,6 @@ def add_evaluation_step(result_tensor, ground_truth_tensor):
   """
   with tf.name_scope('accuracy'):
     with tf.name_scope('correct_prediction'):
-      # prediction = tf.argmax(result_tensor, 1)
-      # correct_prediction = tf.equal(
-      #     prediction, tf.argmax(ground_truth_tensor, 1))
       prediction = tf.round(result_tensor)
       correct_prediction = tf.equal(tf.round(result_tensor), ground_truth_tensor)
     with tf.name_scope('accuracy'):
@@ -987,10 +997,24 @@ def read_annotation(annotation):
         keys = line.rstrip().split('\t')
         continue
       lines.append(line.rstrip().split('\t'))
-  return keys, lines
+  return keys[1:], lines
 
-def load_ground_truth_cache(keys, lines):
-  class_count = len(keys) - 3
+def prune_data(keys, lines, included_keys):
+  new_keys = keys[:2] + included_keys
+  indices = []
+  for k in included_keys:
+    indices.append(keys.index(k))
+    assert(keys[indices[-1]] == k)
+  new_lines = []
+  for line in lines:
+    new_line = line[:2]
+    for i in indices:
+      new_line.append(line[i])
+    new_lines.append(new_line)
+  return new_keys, new_lines
+
+def load_ground_truth_cache(labels, lines):
+  class_count = len(labels)
   for line in lines:
     ground_truth = np.zeros(class_count, dtype=np.float32)
     name = line[0]
@@ -999,6 +1023,7 @@ def load_ground_truth_cache(keys, lines):
     for i in range(class_count):
       if float(line[i+2]) > 0:
         ground_truth[i] = 1.0
+      # ground_truth[i] = 1.0/(1.0+math.exp(-2*float(line[i+2])))
     CACHED_GROUND_TRUTH_VECTORS[filename] = ground_truth
 
 def main(_):
@@ -1020,14 +1045,21 @@ def main(_):
   graph, bottleneck_tensor, resized_image_tensor = (
       create_model_graph(model_info))
 
+  # import pickle
+  # keys_lines = pickle.load(open(FLAGS.annotation, 'rb'))
+  # keys = keys_lines['header']
+  # lines = keys_lines['lines']
+  # included_keys = ['male', 'asianindian', 'eastasian', 'african', 'latino', 'caucasian']
+  # keys, lines = prune_data(keys, lines, included_keys)
   keys, lines = read_annotation(FLAGS.annotation)
-  load_ground_truth_cache(keys, lines)
+
+  labels = keys[2:]
+  class_count = len(labels)
+  load_ground_truth_cache(labels, lines)
 
   # Look at the folder structure, and create lists of all the images.
   image_lists = create_image_lists(FLAGS.image_dir, FLAGS.testing_percentage,
                                    FLAGS.validation_percentage)
-  labels = keys[3:]
-  class_count = len(labels)
 
   # See if the command-line flags mean we're applying any distortions.
   do_distort_images = should_distort_images(
@@ -1066,6 +1098,10 @@ def main(_):
     # Create the operations we need to evaluate the accuracy of our new layer.
     evaluation_step, prediction = add_evaluation_step(
         final_tensor, ground_truth_input)
+    evaluation_steps = []
+    for i in range(class_count):
+      e, _ = add_evaluation_step_per_class(final_tensor, ground_truth_input, i, labels)
+      evaluation_steps.append(e)
 
     # Merge all the summaries and write them out to the summaries_dir
     merged = tf.summary.merge_all()
@@ -1107,14 +1143,25 @@ def main(_):
       # Every so often, print out how well the graph is training.
       is_last_step = (i + 1 == FLAGS.how_many_training_steps)
       if (i % FLAGS.eval_step_interval) == 0 or is_last_step:
-        train_accuracy, cross_entropy_value = sess.run(
-            [evaluation_step, cross_entropy],
-            feed_dict={bottleneck_input: train_bottlenecks,
-                       ground_truth_input: train_ground_truth})
+        results = [evaluation_step, cross_entropy]
+        for es in evaluation_steps:
+          results.append(es)
+        output = sess.run(
+          results,
+          feed_dict={bottleneck_input: train_bottlenecks,
+                     ground_truth_input: train_ground_truth})
+        train_accuracy = output[0]
+        cross_entropy_value = output[1]
+        train_accuracy_per_class = []
+        for j in range(class_count):
+          train_accuracy_per_class.append(output[2+j])
         tf.logging.info('%s: Step %d: Train accuracy = %.1f%%' %
                         (datetime.now(), i, train_accuracy * 100))
         tf.logging.info('%s: Step %d: Cross entropy = %f' %
                         (datetime.now(), i, cross_entropy_value))
+        for j in range(class_count):
+          tf.logging.info('%s:           Train %s accuracy = %.1f%%' %
+                          (datetime.now(), labels[j], train_accuracy_per_class[j] * 100))
         validation_bottlenecks, validation_ground_truth, _ = (
             get_random_cached_bottlenecks(
                 sess, image_lists, FLAGS.validation_batch_size, 'validation',
@@ -1123,14 +1170,26 @@ def main(_):
                 FLAGS.architecture, labels))
         # Run a validation step and capture training summaries for TensorBoard
         # with the `merged` op.
-        validation_summary, validation_accuracy = sess.run(
-            [merged, evaluation_step],
+        val_res = [merged, evaluation_step]
+        for j in range(class_count):
+          val_res.append(evaluation_steps[j])
+        val_output = sess.run(
+            val_res,
             feed_dict={bottleneck_input: validation_bottlenecks,
                        ground_truth_input: validation_ground_truth})
+        validation_summary = val_output[0]
+        validation_accuracy = val_output[1]
+        validation_accuracy_per_class = []
+        for j in range(class_count):
+          validation_accuracy_per_class.append(val_output[2+j])
         validation_writer.add_summary(validation_summary, i)
         tf.logging.info('%s: Step %d: Validation accuracy = %.1f%% (N=%d)' %
                         (datetime.now(), i, validation_accuracy * 100,
                          len(validation_bottlenecks)))
+        for j in range(class_count):
+          tf.logging.info('%s:           Validation %s accuracy = %.1f%% (N=%d)' %
+                          (datetime.now(), labels[j], validation_accuracy_per_class[j] * 100,
+                           len(validation_bottlenecks)))
 
       # Store intermediate results
       intermediate_frequency = FLAGS.intermediate_store_frequency
@@ -1270,7 +1329,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--validation_batch_size',
       type=int,
-      default=100,
+      default=-1,
       help="""\
       How many images to use in an evaluation batch. This validation set is
       used much more often than the test set, and is an early indicator of how
