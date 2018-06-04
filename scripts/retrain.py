@@ -999,9 +999,13 @@ def read_annotation(annotation):
       lines.append(line.rstrip().split('\t'))
   return keys[1:], lines
 
-def prune_data(keys, lines, included_keys):
-  new_keys = keys[:2] + included_keys
+def prune_data(keys, lines, included_keys = [], excluded_keys = []):
   indices = []
+  if included_keys == []:
+    for i in keys[2:]:
+      if i not in excluded_keys:
+        included_keys.append(i)
+  new_keys = keys[:2] + included_keys
   for k in included_keys:
     indices.append(keys.index(k))
     assert(keys[indices[-1]] == k)
@@ -1045,13 +1049,13 @@ def main(_):
   graph, bottleneck_tensor, resized_image_tensor = (
       create_model_graph(model_info))
 
-  # import pickle
-  # keys_lines = pickle.load(open(FLAGS.annotation, 'rb'))
-  # keys = keys_lines['header']
-  # lines = keys_lines['lines']
+  import pickle
+  keys_lines = pickle.load(open(FLAGS.annotation, 'rb'))
+  keys = keys_lines['header']
+  lines = keys_lines['lines']
   # included_keys = ['male', 'asianindian', 'eastasian', 'african', 'latino', 'caucasian']
-  # keys, lines = prune_data(keys, lines, included_keys)
-  keys, lines = read_annotation(FLAGS.annotation)
+  keys, lines = prune_data(keys, lines, excluded_keys = ['Male']) # duplicate keys
+  # keys, lines = read_annotation(FLAGS.annotation)
 
   labels = keys[2:]
   class_count = len(labels)
@@ -1115,6 +1119,7 @@ def main(_):
     init = tf.global_variables_initializer()
     sess.run(init)
 
+    best_val_accuracy = 0
     # Run the training for as many cycles as requested on the command line.
     for i in range(FLAGS.how_many_training_steps):
       # Get a batch of input bottleneck values, either calculated fresh every
@@ -1190,6 +1195,27 @@ def main(_):
           tf.logging.info('%s:           Validation %s accuracy = %.1f%% (N=%d)' %
                           (datetime.now(), labels[j], validation_accuracy_per_class[j] * 100,
                            len(validation_bottlenecks)))
+
+      if validation_accuracy > best_val_accuracy:
+        # We've completed all our training, so run a final test evaluation on
+        # some new images we haven't used before.
+        test_bottlenecks, test_ground_truth, test_filenames = (
+          get_random_cached_bottlenecks(
+            sess, image_lists, FLAGS.test_batch_size, 'testing',
+            FLAGS.bottleneck_dir, FLAGS.image_dir, jpeg_data_tensor,
+            decoded_image_tensor, resized_image_tensor, bottleneck_tensor,
+            FLAGS.architecture, labels))
+        test_accuracy, predictions = sess.run(
+          [evaluation_step, prediction],
+          feed_dict={bottleneck_input: test_bottlenecks,
+                     ground_truth_input: test_ground_truth})
+        tf.logging.info('test accuracy = %.1f%% (N=%d)' %
+                    (test_accuracy * 100, len(test_bottlenecks)))
+        best_val_accuracy = validation_accuracy
+        save_graph_to_file(sess, graph, os.path.join(FLAGS.intermediate_output_graphs_dir, "{}_{}_val_{}_test_{}.pb".format(FLAGS.architecture, i, validation_accuracy, test_accuracy)))
+        with gfile.FastGFile(os.path.join(FLAGS.intermediate_output_graphs_dir, "labels.txt"), 'w') as f:
+          f.write('\n'.join(labels) + '\n')
+
 
       # Store intermediate results
       intermediate_frequency = FLAGS.intermediate_store_frequency
