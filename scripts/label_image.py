@@ -68,17 +68,23 @@ def load_labels(label_file):
   return label
 
 if __name__ == "__main__":
-  file_name = "/Users/azhong/face/data/lfpw_pruned/images/19190173.jpg"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/19190173.jpg"  # white
   # file_name = "/Users/azhong/face/data/lfpw_pruned/images/beyonce-knowles-2486522_1350.jpg"
-  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/hounsou%252Bdjimon.jpg"
-  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/main-171.jpg"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/hounsou%252Bdjimon.jpg" # black
+  file_name = "/Users/azhong/Desktop/Untitled.jpg" # black
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/main-171.jpg" # black
   # file_name = "/Users/azhong/face/data/lfpw_pruned/images/DianeKeatonWhite_newsphoto.jpg"
-  model_file = "tf_files/mobilenet/retrained_graph.pb"
-  label_file = "tf_files/mobilenet/retrained_labels.txt"
+  # file_name = "/Users/azhong/face/data/lfpw_pruned/images/20090423PHOWWW00279.jpg"
+  # model_file = "tf_files/mobilenet_1.0_224_90.4_90.3_only_gender_race/retrained_graph.pb"
+  # label_file = "tf_files/mobilenet_1.0_224_90.4_90.3_only_gender_race/retrained_labels.txt"
+  # model_file = "tf_files/retrained_graph_funneled.pb"
+  # label_file = "tf_files/retrained_labels_funneled.txt"
+  model_file = "tf_files/mobilenet_1.0_224_funneled_46_att_long_0.001/mobilenet_1.0_224_230090_val_0.8091352581977844_test_0.8108987808227539.pb"
+  label_file = "tf_files/mobilenet_1.0_224_funneled_46_att_long_0.001/labels.txt"
   input_height = 224
   input_width = 224
-  input_mean = 128
-  input_std = 128
+  input_mean = 127.5
+  input_std = 127.5
   input_layer = "input"
   output_layer = "final_result"
 
