@@ -1212,6 +1212,8 @@ def main(_):
         tf.logging.info('test accuracy = %.1f%% (N=%d)' %
                     (test_accuracy * 100, len(test_bottlenecks)))
         best_val_accuracy = validation_accuracy
+        if not os.path.isdir(FLAGS.intermediate_output_graphs_dir):
+          os.makedirs(FLAGS.intermediate_output_graphs_dir)
         save_graph_to_file(sess, graph, os.path.join(FLAGS.intermediate_output_graphs_dir, "{}_{}_val_{}_test_{}.pb".format(FLAGS.architecture, i, validation_accuracy, test_accuracy)))
         with gfile.FastGFile(os.path.join(FLAGS.intermediate_output_graphs_dir, "labels.txt"), 'w') as f:
           f.write('\n'.join(labels) + '\n')
