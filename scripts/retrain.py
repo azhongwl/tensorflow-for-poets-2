@@ -523,6 +523,7 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
     for unused_i in range(how_many):
       # label_index = random.randrange(class_count)
       label_index = 0 # there is only one folder with images
+      print("unused ", unused_i, " length ", len(list(image_lists.keys())), " label_idx", label_index)
       label_name = list(image_lists.keys())[label_index]
       image_index = random.randrange(MAX_NUM_IMAGES_PER_CLASS + 1)
       image_name = get_image_path(image_lists, label_name, image_index,
@@ -1065,6 +1066,8 @@ def main(_):
   image_lists = create_image_lists(FLAGS.image_dir, FLAGS.testing_percentage,
                                    FLAGS.validation_percentage)
 
+  print("=======================================",len(image_lists))
+
   # See if the command-line flags mean we're applying any distortions.
   do_distort_images = should_distort_images(
       FLAGS.flip_left_right, FLAGS.random_crop, FLAGS.random_scale,
@@ -1131,6 +1134,7 @@ def main(_):
              FLAGS.image_dir, distorted_jpeg_data_tensor,
              distorted_image_tensor, resized_image_tensor, bottleneck_tensor, labels)
       else:
+        print("labels: ",labels, len(labels))
         (train_bottlenecks,
          train_ground_truth, _) = get_random_cached_bottlenecks(
              sess, image_lists, FLAGS.train_batch_size, 'training',

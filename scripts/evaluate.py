@@ -20,7 +20,6 @@ from __future__ import print_function
 import os
 
 import sys
-import argparse
 
 import numpy as np
 import PIL.Image as Image
@@ -28,13 +27,12 @@ import tensorflow as tf
 import pickle
 
 try:
-    import scripts.retrain as retrain
+    from scripts import retrain as retrain, retrain
     from scripts.count_ops import load_graph
     from scripts.retrain import CACHED_GROUND_TRUTH_VECTORS
 except:
-    import retrain
     from count_ops import load_graph
-    from retrain import CACHED_GROUND_TRUTH_VECTORS
+    from scripts.retrain import CACHED_GROUND_TRUTH_VECTORS
 
 def evaluate_graph(graph_file_name):
     annotation_path = '/Users/azhong/face/face_attrib/lfw_header_lines.p'
