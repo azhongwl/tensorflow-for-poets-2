@@ -7,6 +7,7 @@ from sklearn import cross_validation, grid_search
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.externals import joblib
 
 from sklearn.multiclass import OneVsRestClassifier
@@ -83,6 +84,8 @@ def find_best_model(path, labels, features, out_dir):
 
             sum_file = open(summary_file, 'wb')
             pickle.dump(results, sum_file)
+
+            print(overall)
 
             sum_file.close()
         except:
@@ -212,9 +215,25 @@ def train_svm_classifer2(features, labels, model_output_path):
     model_output_path: path for storing the trained svm model
     """
     # save 20% of data for performance evaluation
-    scaler = StandardScaler()
-    features = scaler.fit(features).transform(features)
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.20)
+    # scaler = StandardScaler()
+    # features = scaler.fit(features).transform(features)
+    #print(features[0])
+    # scaler = MinMaxScaler()
+    # features = scaler.fit_transform(features)#scaler.fit(features).transform(features)
+    #
+    # #print(features[0])
+    #
+    # # X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.20)
+    #
+    # for i in range(0, len(features)):
+    #     for j in range(0, len(features[0])):
+    #         if(features[i][j] > 0.9999 or features[i][j] < -1.000):
+    #             print(i,j,features[i][j],"Aaaaaaaa")
+    #             features[i][j] = 0.999999
+
+    X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.25)
+
+
 
     best_model = None
     best_acc = 0
@@ -230,7 +249,7 @@ def train_svm_classifer2(features, labels, model_output_path):
                     SVC( probability=False,
                          kernel=mkernel,
                          C=mC, gamma=mgamma,
-                         max_iter=10),
+                         max_iter=10000, verbose=True),
                     n_jobs=4)
 
                 model_to_set.fit(X_train, y_train)
