@@ -11,6 +11,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.externals import joblib
 
 from sklearn.multiclass import OneVsRestClassifier
+from scripts.MacUtils import *
 import pickle
 
 def write_large_file(path, data):
@@ -252,12 +253,15 @@ def train_svm_classifer2(features, labels, model_output_path):
                          max_iter=10000, verbose=True),
                     n_jobs=4)
 
+                print("gamma", mgamma, "C", mC)
                 model_to_set.fit(X_train, y_train)
+                print("gamma", mgamma, "C",mC)
 
                 model_name = model_output_path +'_gamma_'+str(mgamma)+'_C_'+str(mC)+'_kernel_'+mkernel+'.p'
-                outfile = open(model_name,'wb')
-                pickle.dump(model_to_set,outfile)
-                outfile.close()
+                # outfile = open(model_name,'wb')
+                # pickle.dump(model_to_set,outfile)
+                # outfile.close()
+                pickle_dump(model_to_set, model_name)
 
 def prune_data(keys, lines, included_keys = [], excluded_keys = []):
     indices = []
