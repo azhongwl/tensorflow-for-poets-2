@@ -8,8 +8,8 @@ def train_gmm_classifier(features, labels, model_output_path):
     X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.25)
 
     best_gmm = None
-    n_components_range = range(1, 16)
-    covariances = ['diag', 'spherical', 'tied']
+    n_components_range = range(8, 16)
+    covariances = ['diag', 'spherical']#, 'tied']
 
     for n_components in n_components_range:
         # Fit a Gaussian mixture with EM

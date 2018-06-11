@@ -12,6 +12,90 @@ from sklearn.externals import joblib
 from sklearn.multiclass import OneVsRestClassifier
 import pickle
 
+def write_large_file(path, data):
+    n_bytes = 2 ** 31
+    max_bytes = 2 ** 31 - 1
+    data = bytearray(n_bytes)
+
+    ## write
+    bytes_out = pickle.dumps(data)
+    with open(path, 'wb') as f_out:
+        for idx in range(0, len(bytes_out), max_bytes):
+            f_out.write(bytes_out[idx:idx + max_bytes])
+
+def find_best_model(path, labels, features, out_dir):
+
+    scaler = StandardScaler()
+    features = scaler.fit(features).transform(features)
+    X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.25)
+
+    paths = os.listdir(path)
+
+    classes = len(labels[0])
+
+    tests = len(X_test)
+
+    best_acc = 0.0
+    best_model = paths[0]
+
+    for file in paths:
+
+        print(file)
+
+        results = np.zeros((tests+1, classes), dtype=float)
+
+        model = pickle.load( open(path+file, 'rb') )
+
+        summary_file = out_dir+file + '_summary.p'
+
+        try:
+
+            predictions = model.predict(X_test)
+
+            print(predictions)
+
+            # we don't really need to store all of it, but just in case
+
+            for i in range(0,tests):
+                for j in range(0, classes):
+                    if predictions[i][j] == y_test[i][j]:
+                        # 1.0 means we classified the label test correctly. 0.0 means we did not
+                        results[i][j] = 1.0
+                        # This is what really matters. I am storing the rest of the info just in case
+                        results[tests][j]+=1.0
+
+            # Time to find the accuracy for each label!
+            # Storing the results in the last row
+
+            overall = 0.0
+
+            for i in range(0, classes):
+                results[tests][i] = results[tests][i]/tests
+                overall += results[tests][i]
+
+            overall = overall/classes
+
+            if overall > best_acc:
+                best_acc = overall
+                best_model = file
+
+            # write the summary file . It won't hurt
+
+            sum_file = open(summary_file, 'wb')
+            pickle.dump(results, sum_file)
+
+            sum_file.close()
+        except:
+            print("SOmething went wrong. Skipping ",file)
+
+    decision_fname = out_dir+'best_model.p'
+
+    decision_file = open(decision_fname, 'wb')
+
+    pickle.dump( [best_model, best_acc], decision_file)
+
+    print("done")
+
 def load_bottlenecks(path, unpickled, postfix):
     """
 
@@ -155,9 +239,6 @@ def train_svm_classifer2(features, labels, model_output_path):
                 outfile = open(model_name,'wb')
                 pickle.dump(model_to_set,outfile)
                 outfile.close()
-
-
-
 
 def prune_data(keys, lines, included_keys = [], excluded_keys = []):
     indices = []

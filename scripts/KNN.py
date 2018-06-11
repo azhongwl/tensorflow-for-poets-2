@@ -8,24 +8,26 @@ def train_knn_classifier(features, labels, model_output_path):
     features = scaler.fit(features).transform(features)
     X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.25)
 
+    distances = ['euclidean', 'manhattan','chebyshev','mahalanobis']
 
 
-    for n_components in n_components_range:
+    for k in range(3, 30, 2):
         # Fit a Gaussian mixture with EM
-        for cov in covariances:
-            gmm = mixture.GaussianMixture(n_components=n_components,
-                                          covariance_type=cov, max_iter=100,
-                                          init_params='kmeans')
 
-            print(cov, n_components)
-            model_to_set = OneVsRestClassifier(gmm, n_jobs=8)
+        for dist in distances:
+
+            mknn = NearestNeighbors(n_neighbors=k, metric=dist, algorithm='ball_tree')
+
+            print(k, dist)
+            model_to_set = OneVsRestClassifier(mknn, n_jobs=8)
             model_to_set.fit(X_train, y_train)
 
-            model_name = model_output_path+str(n_components)+'_'+cov+'.p'
+            model_name = model_output_path+str(k)+'_'+dist+'.p'
             outfile = open(model_name, 'wb')
             # print(cov, n_components)
 
-            pickle.dump(model_to_set, outfile)
+            # pickle.dump(model_to_set, outfile)
+            pickle.dump(model_to_set, outfile, pickle.HIGHEST_PROTOCOL)
             outfile.close()
 
 
@@ -60,7 +62,7 @@ if __name__ == '__main__':
     ground_truth = load_ground_truth_cache(keys, lines)
 
 
-    train_gmm_classifier(np.array(bottlenecks),
+    train_knn_classifier(np.array(bottlenecks),
                          np.array(ground_truth),
                          '/Users/jmarcano/dev/andrews/tensorflow-for-poets-2/knn_models/knn_')
 
