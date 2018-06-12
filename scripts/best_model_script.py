@@ -37,6 +37,11 @@ if __name__ == '__main__':
     gmm_path = '/Users/jmarcano/dev/andrews/tensorflow-for-poets-2/gmm_models/'
     out_dir_gmm = '/Users/jmarcano/dev/andrews/tensorflow-for-poets-2/gmm_summary/'
 
+    knn_path = '/Users/jmarcano/dev/andrews/tensorflow-for-poets-2/knn_models/'
+    out_dir_knn = '/Users/jmarcano/dev/andrews/tensorflow-for-poets-2/knn_summary/'
+
     find_best_model(svm_path, ground_truth, np.array(bottlenecks), out_dir_svm )
 
-    find_best_model(gmm_path, ground_truth, np.array(bottlenecks), out_dir_gmm)
+    # find_best_model(gmm_path, ground_truth, np.array(bottlenecks), out_dir_gmm)
+
+    # find_best_model(knn_path, ground_truth, np.array(bottlenecks), out_dir_knn)

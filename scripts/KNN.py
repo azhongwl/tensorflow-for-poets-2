@@ -1,34 +1,98 @@
 from scripts.svm_script import *
 
-from sklearn.neighbors import NearestNeighbors
+from sklearn import neighbors
 
 def train_knn_classifier(features, labels, model_output_path):
 
-    scaler = StandardScaler()
-    features = scaler.fit(features).transform(features)
+    # scaler = StandardScaler()
+    # features = scaler.fit(features).transform(features)
     X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.25)
 
-    distances = ['euclidean', 'manhattan','chebyshev','mahalanobis']
+    distances = ['euclidean']#, 'manhattan','chebyshev']
+
+    best_acc= 0.0
+    best_model = None
+
+    classes = len(labels[0])
+
+    tests = len(X_test)
 
 
-    for k in range(3, 30, 2):
+    for k in range(5, 30, 2):
         # Fit a Gaussian mixture with EM
 
         for dist in distances:
 
-            mknn = NearestNeighbors(n_neighbors=k, metric=dist, algorithm='ball_tree')
+            mknn = neighbors.KNeighborsClassifier( n_neighbors=k, metric=dist, algorithm='ball_tree')
+            # NearestNeighbors(n_neighbors=k, metric=dist, algorithm='ball_tree')
 
             print(k, dist)
             model_to_set = OneVsRestClassifier(mknn, n_jobs=8)
             model_to_set.fit(X_train, y_train)
 
-            model_name = model_output_path+str(k)+'_'+dist+'.p'
-            outfile = open(model_name, 'wb')
-            # print(cov, n_components)
+            results = np.zeros((tests + 1, classes), dtype=float)
 
-            # pickle.dump(model_to_set, outfile)
-            pickle.dump(model_to_set, outfile, pickle.HIGHEST_PROTOCOL)
-            outfile.close()
+            # model = pickle.load(open(path + file, 'rb'))
+
+            summary_file_name = model_output_path + dist + '_' + str(k) + '_summary.p'
+
+            try:
+
+                predictions = model_to_set.predict(X_test)
+                # model_to_set.
+
+                # print(predictions)
+
+                # we don't really need to store all of it, but just in case
+
+                for i in range(0, tests):
+                    for j in range(0, classes):
+                        if predictions[i][j] == y_test[i][j]:
+                            # 1.0 means we classified the label test correctly. 0.0 means we did not
+                            results[i][j] = 1.0
+                            # This is what really matters. I am storing the rest of the info just in case
+                            results[tests][j] += 1.0
+
+                # Time to find the accuracy for each label!
+                # Storing the results in the last row
+
+                overall = 0.0
+
+                for i in range(0, classes):
+                    results[tests][i] = results[tests][i] / tests
+                    overall += results[tests][i]
+
+                overall = overall / classes
+
+                if overall > best_acc:
+                    best_acc = overall
+                    best_model = summary_file_name
+                    pickle_dump(model_to_set, model_output_path+'best.p')
+
+                # write the summary file . It won't hurt
+
+                sum_file = open(summary_file_name, 'wb')
+                pickle.dump(results, sum_file)
+
+                print(overall)
+
+                sum_file.close()
+
+
+            except:
+                print("SOmething went wrong. Skipping ")
+
+
+    pickle.dump([best_acc, best_model], open(model_output_path+'best_results_info.p') )
+
+            # model_name = model_output_path+str(k)+'_'+dist+'.p'
+            # pickle_dump(model_to_set, model_name)
+            # outfile = open(model_name, 'wb')
+            # # print(cov, n_components)
+            #
+            # # pickle.dump(model_to_set, outfile)
+            # pickle.dump(model_to_set, outfile, pickle.HIGHEST_PROTOCOL)
+            # outfile.close()
 
 
 if __name__ == '__main__':

@@ -1,3 +1,7 @@
+"""
+Note: This is a quick workaround to big-file management in Mac computers.
+It was taken from https://stackoverflow.com/questions/31468117, answered by user Sam Cohan
+"""
 import pickle
 
 class MacOSFile(object):
@@ -36,3 +40,4 @@ class MacOSFile(object):
 def pickle_dump(obj, file_path):
     with open(file_path, "wb") as f:
         return pickle.dump(obj, MacOSFile(f), protocol=pickle.HIGHEST_PROTOCOL)
+

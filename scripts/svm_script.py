@@ -216,31 +216,31 @@ def train_svm_classifer2(features, labels, model_output_path):
     model_output_path: path for storing the trained svm model
     """
     # save 20% of data for performance evaluation
-    # scaler = StandardScaler()
-    # features = scaler.fit(features).transform(features)
+    scaler = StandardScaler()
+    features = scaler.fit(features).transform(features)
     #print(features[0])
     # scaler = MinMaxScaler()
     # features = scaler.fit_transform(features)#scaler.fit(features).transform(features)
-    #
-    # #print(features[0])
-    #
-    # # X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.20)
-    #
+    # #
+    # # #print(features[0])
+    # #
+    # # # X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.20)
+    # #
     # for i in range(0, len(features)):
     #     for j in range(0, len(features[0])):
     #         if(features[i][j] > 0.9999 or features[i][j] < -1.000):
     #             print(i,j,features[i][j],"Aaaaaaaa")
     #             features[i][j] = 0.999999
 
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.25)
+    X_train, X_test, y_train, y_test = cross_validation.train_test_split(features, labels, test_size=0.4)
 
 
 
     best_model = None
     best_acc = 0
-    kernels = ['rbf']
+    kernels = ['linear']
 
-    gammas = [1e-2, 1e-3, 1e-4]
+    gammas = [1e-2]#, 1e-3, 1e-4]
     Cs = [1, 10, 100, 1000, 10000]
 
     for mgamma in gammas:
@@ -248,10 +248,10 @@ def train_svm_classifer2(features, labels, model_output_path):
             for mkernel in kernels:
                 model_to_set = OneVsRestClassifier(
                     SVC( probability=False,
-                         kernel=mkernel,
+                         kernel='linear',
                          C=mC, gamma=mgamma,
-                         max_iter=10000, verbose=True),
-                    n_jobs=4)
+                         max_iter=40000, verbose=True),
+                    n_jobs=8)
 
                 print("gamma", mgamma, "C", mC)
                 model_to_set.fit(X_train, y_train)
@@ -286,7 +286,7 @@ def prune_data2(keys, lines, excluded_keys={}):
     new_keys = keys[2:]
     to_remove = []
 
-    for i in range(len(new_keys) - 1, 0):
+    for i in range(len(new_keys) - 1, 0, -1):
         if (new_keys[i] in excluded_keys):
             new_keys.pop(i)
             to_remove.append(i)
